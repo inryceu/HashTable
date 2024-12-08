@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <initializer_list>
+#include <map>
 using namespace std;
 
 template <typename T>
@@ -213,7 +214,7 @@ public:
         size = 0;
     }
 
-   LinkedList<T> clone() const 
+    LinkedList<T> clone() const 
    { 
        LinkedList<T> copy; 
        auto temp = firstNode; 
@@ -225,7 +226,23 @@ public:
        return copy; 
    }
 
-   friend ostream& operator<<(ostream& os, const LinkedList<T>& list)
+    T* toArray()
+    {
+        T* arr = new T[this->size];
+       
+        auto temp = firstNode;
+        size_t index = 0;
+        while (temp)
+        {
+            arr[index] = temp->value;
+            temp = temp->next;
+            index++;
+        }
+
+        return arr;
+    }
+
+    friend ostream& operator<<(ostream& os, const LinkedList<T>& list)
    {
        auto temp = list.firstNode;
        os << "[";
@@ -239,7 +256,138 @@ public:
 
        return os;
    }
+
+    shared_ptr<Node<T>> getFirstNode() const { return firstNode; }
 };
+
+template <typename K, typename V>
+class HashTable
+{
+private:
+    LinkedList<pair<K, V>> entries;
+    size_t size = 0;
+public:
+    HashTable() = default;
+    HashTable(initializer_list<pair<K, V>> initList)
+    {
+        for (auto& entry : initList)
+        {
+            entries.push(entry); size++;
+        }
+    }
+
+    size_t length() const
+    {
+        return this->size;
+    }
+
+    void add(K key, V value)
+    {
+        auto temp = entries.getFirstNode();
+        while (temp)
+        {
+            if (temp->value.first == key) return;
+            temp = temp->next;
+        }
+
+        entries.push(make_pair(key, value));
+        size++;
+    }
+
+    void remove(K key)
+    {
+        auto temp = entries.getFirstNode();
+        size_t index = 0;
+        while (temp)
+        {
+            if (temp->value.first == key)
+            {
+                entries.removeAt(index);
+                size--;
+                return;
+            }
+            index++;
+            temp = temp->next;
+        }
+    }
+
+    V get(K key)
+    {
+        auto temp = entries.getFirstNode();
+        while (temp)
+        {
+            if (temp->value.first == key)
+            {
+                return temp->value.second;
+            }
+            temp = temp->next;
+        }
+    }
+
+    void clear()
+    {
+        entries.clear();
+        size = 0;
+    }
+
+    K* keys()
+    {
+        K* arr = new K[this->size];
+
+        auto temp = entries.getFirstNode();
+        size_t index = 0;
+        while (temp)
+        {
+            arr[index] = temp->value.first;
+            temp = temp->next;
+            index++;
+        }
+
+        return arr;
+    }
+
+    V* values()
+    {
+        V* arr = new V[this->size];
+
+        auto temp = entries.getFirstNode();
+        size_t index = 0;
+        while (temp)
+        {
+            arr[index] = temp->value.second;
+            temp = temp->next;
+            index++;
+        }
+
+        return arr;
+    }
+
+    HashTable<K, V> clone() const
+    {
+        HashTable<K, V> copy;
+        auto temp = entries.getFirstNode();
+        while (temp)
+        {
+            copy.add(temp->value.first, temp->value.second);
+            temp = temp->next;
+        }
+        return copy;
+    }
+
+    friend ostream& operator<<(ostream& os, const HashTable<K, V>& table)
+    {
+        auto temp = table.entries.getFirstNode();
+        os << "{ ";
+        while (temp)
+        {
+            os << "{" << temp->value.first << ": " << temp->value.second << "} ";
+            temp = temp->next;
+        }
+        os << "}";
+        return os;
+    }
+};
+
 
 int main()
 {
@@ -269,4 +417,47 @@ int main()
     clonedList.clear();
     cout << clonedList << " " << clonedList.length() << endl;
     cout << list << " " << list.length() << endl;
+
+    auto array = list.toArray();
+    for (size_t i = 0; i < list.length(); i++)
+    {
+        cout << array[i] << " ";
+    }
+
+    cout << "\n\n==============================\n\n";
+
+    HashTable<int, string> hashTable({ {1, "one"}, {2, "two"}, {3, "three"} });
+    cout << hashTable << endl;
+
+    hashTable.add(4, "four");
+    cout << hashTable << endl;
+
+    hashTable.add(2, "two_already_created");
+    cout << hashTable << endl;
+
+    hashTable.remove(3); 
+    cout << hashTable << endl;
+
+    cout << hashTable.get(2) << endl;
+
+    HashTable<int, string> clonedHashTable = hashTable.clone();
+    cout << clonedHashTable << endl;
+
+    clonedHashTable.clear();
+    cout << clonedHashTable << " Length: " << clonedHashTable.length() << endl;
+    cout << hashTable << " Length: " << hashTable.length() << endl;
+
+    auto keys = hashTable.keys();
+    for (size_t i = 0; i < hashTable.length(); i++)
+    {
+        cout << keys[i] << " ";
+    }
+    cout << endl;
+
+    auto values = hashTable.values();
+    for (size_t i = 0; i < hashTable.length(); i++)
+    {
+        cout << values[i] << " ";
+    }
+    cout << endl;
 }
