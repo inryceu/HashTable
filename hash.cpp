@@ -1,41 +1,64 @@
 #include <iostream>
 #include <memory>
 #include <initializer_list>
-#include <map>
+#include <vector>
 using namespace std;
-
-template <typename T>
-struct Node
-{
-    shared_ptr<Node<T>> prev;
-    shared_ptr<Node<T>> next;
-    T value;
-    size_t index;
-
-    Node(shared_ptr<Node<T>> p, shared_ptr<Node<T>> n, T v, size_t i)
-        : prev(p), next(n), value(v), index(i) {
-    }
-};
 
 template <typename T>
 class LinkedList
 {
 private:
-    shared_ptr<Node<T>> firstNode = nullptr;
-    shared_ptr<Node<T>> lastNode = nullptr;
+    struct Node
+    {
+        shared_ptr<Node> prev;
+        shared_ptr<Node> next;
+        T value;
+        size_t index;
+
+        Node(shared_ptr<Node> p, shared_ptr<Node> n, T v, size_t i)
+            : prev(p), next(n), value(v), index(i) {
+        }
+    };
+
+    shared_ptr<Node> firstNode = nullptr;
+    shared_ptr<Node> lastNode = nullptr;
     size_t size = 0;
 public:
     LinkedList() = default;
-    LinkedList(T value)
+    LinkedList(const T& value)
     {
-        auto first = make_shared<Node<T>>(nullptr, nullptr, value, 0);
+        auto first = make_shared<Node>(nullptr, nullptr, value, 0);
         this->firstNode = this->lastNode = first;
         size++;
     }
     LinkedList(initializer_list<T> values)
     {
-        for (auto value : values) push(value);
+        for (const auto& value : values) push(value);
     }
+
+    class Iterator
+    {
+    private:
+        shared_ptr<Node> current;
+
+    public:
+        Iterator(shared_ptr<Node> node) : current(node) {}
+
+        T& operator*() { return current->value; }
+
+        Iterator& operator++()
+        {
+            if (current) {
+                current = current->next;
+            }
+            return *this;
+        }
+
+        bool operator!=(const Iterator& other) const { return current != other.current; }
+    };
+
+    Iterator begin() const { return Iterator(firstNode); }
+    Iterator end() const { return Iterator(nullptr); }
 
     T first() const
     {
@@ -49,10 +72,7 @@ public:
         else throw out_of_range("List is empty");
     }
 
-    size_t length() const
-    {
-        return this->size;
-    }
+    size_t length() const { return this->size; }
 
     T& at(size_t index)
     {
@@ -66,23 +86,23 @@ public:
         return temp->value;
     }
 
-    T& operator[](size_t index) 
-    { 
+    T& operator[](size_t index)
+    {
         return this->at(index);
     }
 
-    void push(T element)
+    void push(const T& element)
     {
-        auto temp = make_shared<Node<T>>(lastNode, nullptr, element, size);
+        auto temp = make_shared<Node>(lastNode, nullptr, element, size);
         if (lastNode) lastNode->next = temp;
         lastNode = temp;
         if (!firstNode) firstNode = lastNode;
         size++;
     }
 
-    void unshift(T element)
+    void unshift(const T& element)
     {
-        auto temp = make_shared<Node<T>>(nullptr, firstNode, element, 0);
+        auto temp = make_shared<Node>(nullptr, firstNode, element, 0);
         if (firstNode) firstNode->prev = temp;
         firstNode = temp;
         if (!lastNode) lastNode = firstNode;
@@ -108,9 +128,9 @@ public:
 
         for (auto value : values)
         {
-            auto newNode = make_shared<Node<T>>(temp, temp->next, value, index); 
-            temp->next->prev = newNode; 
-            temp->next = newNode; 
+            auto newNode = make_shared<Node>(temp, temp->next, value, index);
+            temp->next->prev = newNode;
+            temp->next = newNode;
 
             if (index == 0) { firstNode = newNode; }
             else if (index == size) { lastNode = newNode; }
@@ -125,8 +145,8 @@ public:
             index++;
         }
     }
-        
-    void remove(T value)
+
+    void remove(const T& value)
     {
         auto temp = firstNode;
         while (temp)
@@ -214,22 +234,22 @@ public:
         size = 0;
     }
 
-    LinkedList<T> clone() const 
-   { 
-       LinkedList<T> copy; 
-       auto temp = firstNode; 
-       while (temp) 
-       { 
-           copy.push(temp->value); 
-           temp = temp->next; 
-       } 
-       return copy; 
-   }
+    LinkedList<T> clone() const
+    {
+        LinkedList<T> copy;
+        auto temp = firstNode;
+        while (temp)
+        {
+            copy.push(temp->value);
+            temp = temp->next;
+        }
+        return copy;
+    }
 
     T* toArray()
     {
         T* arr = new T[this->size];
-       
+
         auto temp = firstNode;
         size_t index = 0;
         while (temp)
@@ -243,221 +263,252 @@ public:
     }
 
     friend ostream& operator<<(ostream& os, const LinkedList<T>& list)
-   {
-       auto temp = list.firstNode;
-       os << "[";
-       while (temp)
-       {
-           os << temp->value;
-           temp = temp->next;
-           if (temp) os << ", ";
-       }
-       os << "]";
+    {
+        auto temp = list.firstNode;
+        os << "[";
+        while (temp)
+        {
+            os << temp->value;
+            temp = temp->next;
+            if (temp) os << ", ";
+        }
+        os << "]";
 
-       return os;
-   }
-
-    shared_ptr<Node<T>> getFirstNode() const { return firstNode; }
+        return os;
+    }
 };
 
 template <typename K, typename V>
 class HashTable
 {
 private:
-    LinkedList<pair<K, V>> entries;
+    vector<LinkedList<pair<K, V>>> buckets;
+    size_t bucketCount;
     size_t size = 0;
+
+    size_t getBucketIndex(const K& key) const
+    {
+        return hash<K>{}(key) % bucketCount;
+    }
+
 public:
-    HashTable() = default;
-    HashTable(initializer_list<pair<K, V>> initList)
+    HashTable(size_t bucketCount = 16) : bucketCount(bucketCount)
     {
-        for (auto& entry : initList)
+        buckets.resize(bucketCount);
+    }
+
+    HashTable(initializer_list<pair<K, V>> initList, size_t bucketCount = 16)
+        : bucketCount(bucketCount)
+    {
+        buckets.resize(bucketCount);
+        for (const auto& entry : initList)
         {
-            entries.push(entry); size++;
+            add(entry.first, entry.second);
         }
     }
 
-    size_t length() const
+    class HashTableIterator
     {
-        return this->size;
-    }
+    private:
+        typename vector<LinkedList<pair<K, V>>>::iterator bucketIterator;
+        typename LinkedList<pair<K, V>>::Iterator listIterator;
 
-    void add(K key, V value)
-    {
-        auto temp = entries.getFirstNode();
-        while (temp)
-        {
-            if (temp->value.first == key) return;
-            temp = temp->next;
+    public:
+        HashTableIterator(typename vector<LinkedList<pair<K, V>>>::iterator bucketIt)
+            : bucketIterator(bucketIt), listIterator(bucketIt->begin()) {
         }
 
-        entries.push(make_pair(key, value));
+        bool operator!=(const HashTableIterator& other) const
+        {
+            return bucketIterator != other.bucketIterator || listIterator != other.listIterator;
+        }
+
+        void operator++()
+        {
+            ++listIterator;
+            if (listIterator == bucketIterator->end()) {
+                ++bucketIterator;
+                if (bucketIterator != bucketIterator->end()) {
+                    listIterator = bucketIterator->begin();
+                }
+            }
+        }
+
+        const pair<K, V>& operator*() const { return *listIterator; }
+
+        pair<K, V>& operator*() { return *listIterator; }
+    };
+
+    HashTableIterator begin() const
+    {
+        for (auto it = buckets.begin(); it != buckets.end(); ++it)
+        {
+            if (it->begin() != it->end())
+                return HashTableIterator(it);
+        }
+        return end();
+    }
+
+    HashTableIterator end() const
+    {
+        return HashTableIterator(buckets.end());
+    }
+
+    void add(const K& key, const V& value)
+    {
+        auto& bucket = buckets[getBucketIndex(key)];
+
+        for (auto& entry : bucket)
+        {
+            if (entry.first == key)
+            {
+                entry.second = value;
+                return;
+            }
+        }
+
+        bucket.push(make_pair(key, value));
         size++;
     }
 
-    void remove(K key)
+    void remove(const K& key)
     {
-        auto temp = entries.getFirstNode();
-        size_t index = 0;
-        while (temp)
+        auto& bucket = buckets[getBucketIndex(key)];
+        for (auto it = bucket.begin(); it != bucket.end(); ++it)
         {
-            if (temp->value.first == key)
+            if ((*it).first == key)
             {
-                entries.removeAt(index);
+                bucket.remove(*it);
                 size--;
                 return;
             }
-            index++;
-            temp = temp->next;
         }
     }
 
-    V get(K key)
+    V get(const K& key) const
     {
-        auto temp = entries.getFirstNode();
-        while (temp)
+        const auto& bucket = buckets[getBucketIndex(key)];
+
+        for (const auto& entry : bucket)
         {
-            if (temp->value.first == key)
-            {
-                return temp->value.second;
-            }
-            temp = temp->next;
+            if (entry.first == key)
+                return entry.second;
         }
+
+        throw out_of_range("Key not found in hash table");
     }
+
+    bool contains(const K& key) const
+    {
+        const auto& bucket = buckets[getBucketIndex(key)];
+        for (const auto& entry : bucket)
+        {
+            if (entry.first == key)
+                return true;
+        }
+        return false;
+    }
+
+    size_t getSize() const { return size; }
+    size_t getBucketCount() const { return bucketCount; }
 
     void clear()
     {
-        entries.clear();
+        for (auto& bucket : buckets)
+        {
+            bucket.clear();
+        }
         size = 0;
-    }
-
-    K* keys()
-    {
-        K* arr = new K[this->size];
-
-        auto temp = entries.getFirstNode();
-        size_t index = 0;
-        while (temp)
-        {
-            arr[index] = temp->value.first;
-            temp = temp->next;
-            index++;
-        }
-
-        return arr;
-    }
-
-    V* values()
-    {
-        V* arr = new V[this->size];
-
-        auto temp = entries.getFirstNode();
-        size_t index = 0;
-        while (temp)
-        {
-            arr[index] = temp->value.second;
-            temp = temp->next;
-            index++;
-        }
-
-        return arr;
     }
 
     HashTable<K, V> clone() const
     {
-        HashTable<K, V> copy;
-        auto temp = entries.getFirstNode();
-        while (temp)
+        HashTable<K, V> newTable(bucketCount);
+        for (const auto& bucket : buckets)
         {
-            copy.add(temp->value.first, temp->value.second);
-            temp = temp->next;
+            for (const auto& entry : bucket)
+            {
+                newTable.add(entry.first, entry.second);
+            }
         }
-        return copy;
+        return newTable;
     }
 
-    friend ostream& operator<<(ostream& os, const HashTable<K, V>& table)
+    friend ostream& operator<<(ostream& os, const HashTable<K, V>& hashTable)
     {
-        auto temp = table.entries.getFirstNode();
         os << "{ ";
-        while (temp)
+        bool first = true;
+        for (const auto& bucket : hashTable.buckets)
         {
-            os << "{" << temp->value.first << ": " << temp->value.second << "} ";
-            temp = temp->next;
+            for (const auto& entry : bucket)
+            {
+                if (!first) {
+                    os << ", ";
+                }
+                os << entry.first << ": " << entry.second;
+                first = false;
+            }
         }
-        os << "}";
+        os << " }";
         return os;
     }
 };
 
+int main() {
+    cout << "Testing LinkedList:" << endl;
 
-int main()
-{
-    LinkedList<int> list({ 1, 2, 3 });
-    cout << list << endl;
+    LinkedList<int> list = { 1, 2, 3, 4 };
+    cout << "Initial list: " << list << endl;
 
-    list.push(4);
+    list.push(5);
+    cout << "After push(5): " << list << endl;
+
     list.unshift(0);
-    cout << list << endl;
+    cout << "After unshift(0): " << list << endl;
 
-    list.insert(2, { 5, 6, 7 });
-    cout << list << endl;
+    cout << "First element: " << list.first() << endl;
+    cout << "Last element: " << list.last() << endl;
 
-    list.remove(5);
-    cout << list << endl;
+    list.remove(3);
+    cout << "After removing 3: " << list << endl;
 
     list.removeAt(1);
-    cout << list << endl;
+    cout << "After removing element at index 1: " << list << endl;
 
     list.removeFirst();
+    cout << "After removing the first element: " << list << endl;
+
     list.removeLast();
-    cout << list << endl;
+    cout << "After removing the last element: " << list << endl;
 
-    LinkedList<int> clonedList = list.clone();
-    cout << clonedList << endl;
+    list.clear();
+    cout << "After clear(): " << list << endl;
 
-    clonedList.clear();
-    cout << clonedList << " " << clonedList.length() << endl;
-    cout << list << " " << list.length() << endl;
+    cout << "\nTesting HashTable:" << endl;
 
-    auto array = list.toArray();
-    for (size_t i = 0; i < list.length(); i++)
-    {
-        cout << array[i] << " ";
-    }
+    HashTable<string, int> table = { {"apple", 1}, {"banana", 2} };
+    cout << "Initial HashTable: " << table << endl;
 
-    cout << "\n\n==============================\n\n";
+    table.add("cherry", 3);
+    cout << "After add('cherry', 3): " << table << endl;
 
-    HashTable<int, string> hashTable({ {1, "one"}, {2, "two"}, {3, "three"} });
-    cout << hashTable << endl;
+    table.add("banana", 4);
+    cout << "After add('banana', 4): " << table << endl;
 
-    hashTable.add(4, "four");
-    cout << hashTable << endl;
+    cout << "Value for 'apple': " << table.get("apple") << endl;
+    cout << "Does it contain 'banana'? " << (table.contains("banana") ? "Yes" : "No") << endl;
 
-    hashTable.add(2, "two_already_created");
-    cout << hashTable << endl;
+    table.remove("apple");
+    cout << "After removing 'apple': " << table << endl;
 
-    hashTable.remove(3); 
-    cout << hashTable << endl;
+    table.clear();
+    cout << "After clear(): " << table << endl;
 
-    cout << hashTable.get(2) << endl;
+    HashTable<string, int> clonedTable = table.clone();
+    cout << "Cloned table: " << clonedTable << endl;
 
-    HashTable<int, string> clonedHashTable = hashTable.clone();
-    cout << clonedHashTable << endl;
-
-    clonedHashTable.clear();
-    cout << clonedHashTable << " Length: " << clonedHashTable.length() << endl;
-    cout << hashTable << " Length: " << hashTable.length() << endl;
-
-    auto keys = hashTable.keys();
-    for (size_t i = 0; i < hashTable.length(); i++)
-    {
-        cout << keys[i] << " ";
-    }
-    cout << endl;
-
-    auto values = hashTable.values();
-    for (size_t i = 0; i < hashTable.length(); i++)
-    {
-        cout << values[i] << " ";
-    }
-    cout << endl;
+    table.add("grape", 5);
+    table.add("orange", 6);
+    cout << "After re-adding items to the original table: " << table << endl;
+    cout << "Cloned table (should be empty as it was cloned before adding): " << clonedTable << endl;
 }
